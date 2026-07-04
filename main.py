@@ -1,40 +1,37 @@
-from flask import Flask, render_template_string, request, redirect, session, url_for
-import sqlite3
-import os
-from datetime import datetime
+import requests
 
-app = Flask(__name__)
-app.secret_key = 'betpro229_secret_key_change_me'
+CINETPAY_APIKEY = 'TA_CLE_API_ICI' # Tu l’auras sur cinetpay.com
+CINETPAY_SITE_ID = 'TON_SITE_ID_ICI'
 
-DB = 'betpro.db'
-
-def init_db():
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (id INTEGER PRIMARY KEY, pseudo TEXT UNIQUE, solde REAL DEFAULT 0)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS messages
-                 (id INTEGER PRIMARY KEY, pseudo TEXT, msg TEXT, date TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS depots
-                 (id INTEGER PRIMARY KEY, pseudo TEXT, montant REAL, statut TEXT, date TEXT)''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
-# Page d'accueil
-@app.route('/')
-def home():
+@app.route('/depot', methods=['GET','POST'])
+def depot():
     if 'pseudo' not in session:
         return redirect(url_for('login'))
 
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-    c.execute("SELECT solde FROM users WHERE pseudo=?", (session['pseudo'],))
-    solde = c.fetchone()[0]
-    conn.close()
+    if request.method == 'POST':
+        montant = int(request.form['montant'])
+        transaction_id = f"BET229_{session['pseudo']}_{int(datetime.now().timestamp())}"
 
-    return render_template_string('''
+        # 1. Créer paiement CinetPay
+        data = {
+            "apikey": CINETPAY_APIKEY,
+            "site_id": CINETPAY_SITE_ID,
+            "transaction_id": transaction_id,
+            "amount": montant,
+            "currency": "XOF",
+            "description": f"Recharge BetPro229 {session['pseudo']}",
+            "return_url": f"https://on-39350.up.railway.app/retour",
+            "notify_url": f"https://on-39350.up.railway.app/notify"
+        }
+
+        r = requests.post("https://api.cinetpay.com/v1/?method=payment", data=data).json()
+
+        if r['code'] == '201':
+            return redirect(r['data']['payment_url']) # Redirige vers page CinetPay
+        else:
+            return "Erreur paiement: " + r['message']
+
+    return render_template_string('...ton formulaire dépôt...')    return render_template_string('''
     <!doctype html>
     <html>
     <head><title>BetPro 229</title>
